@@ -5,7 +5,7 @@ import os
 import time
 import json
 from datetime import datetime
-
+import csv
 
 def get_all_pages():
     headers = {
@@ -42,6 +42,17 @@ def get_all_pages():
 def collect_data(pages_count):
     cur_date = datetime.now().strftime("%d_%m_%Y")
 
+    with open(f"data_{cur_date}.csv", "w", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        writer.writerow(
+            (
+                "Article",
+                "URL",
+                "Price"
+            )
+        )
+
     data = []
     for page in range(1, pages_count):
         with open(f"data/page_{page}.html", encoding="utf-8") as file:
@@ -64,6 +75,17 @@ def collect_data(pages_count):
                     "product_url": product_url
                 }
             )
+
+            with open(f"data_{cur_date}.csv", "a", encoding="utf-8") as file:
+                writer = csv.writer(file)
+
+                writer.writerow(
+                    (
+                        product_article,
+                        product_url,
+                        product_price
+                    )
+                )
 
         print(f"[INFO] Successfully finished {page}")
 
