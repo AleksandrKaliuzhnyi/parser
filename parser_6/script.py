@@ -47,6 +47,7 @@ def get_source_html(url):
         driver.close()
         driver.quit()
 
+
 def get_items_urls(file_path):
     with open(file_path, encoding="utf-8") as file:
         src = file.read()
@@ -64,6 +65,7 @@ def get_items_urls(file_path):
             file.write(f"{url}\n")
 
     return "[INFO] Urls collected successfully!"
+
 
 def get_data(file_path):
     with open(file_path) as file:
