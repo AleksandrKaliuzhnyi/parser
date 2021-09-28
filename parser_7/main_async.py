@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
 import time
+import asyncio
+import aiohttp
 
 
 headers = {
@@ -11,41 +13,19 @@ headers = {
     "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.106 Safari/537.36"
 }
 
+url = "https://www.labirint.ru/genres/2308/?available=1&paperbooks=1&display=table"
 
+books_data = []
 start_time = time.time()
 
 
-def get_data():
-    cur_time = datetime.now().strftime("%d_%m_%Y_%H_%M")
+async def get_page_data(session, page):
+    url = f"https://www.labirint.ru/genres/2308/?available=1&paperbooks=1&display=table={page}"
 
-    with open(f"labirint_{cur_time}.csv", "w", encoding="utf-8") as file:
-        writer = csv.writer(file)
+    async with session.get(url=url, headers=headers) as response:
+        response_text = await response.text()
 
-        writer.writerow(
-            (
-                "Book name",
-                "Author",
-                "Publishing",
-                "Sale price",
-                "Price",
-                "Sale amount",
-                "Status"
-            )
-        )
-
-    url = "https://www.labirint.ru/genres/2308/?available=1&paperbooks=1&display=table"
-
-    response = requests.get(url=url, headers=headers)
-    soup = BeautifulSoup(response, 'lxml')
-
-    pages_count = int(soup.find("div", class_="pagination_numbers").find_all("a")[-1].text)
-
-    books_data = []
-    for page in range(1, pages_count + 1):
-        url = f"https://www.labirint.ru/genres/2308/?available=1&paperbooks=1&display=table={page}"
-
-        response = requests.get(url=url, headers=headers)
-        soup = BeautifulSoup(response, "lxml")
+        soup = BeautifulSoup(response_text, "lxml")
 
         books_items = soup.find("tbody", class_="products-table__body").find_all("tr")
 
@@ -69,7 +49,8 @@ def get_data():
                 book_publishing = "No book publishing"
 
             try:
-                book_new_price = int(book_data[3].find("div", class_="price").find("span").find("span").text.strip().replace(" ", ""))
+                book_new_price = int(
+                    book_data[3].find("div", class_="price").find("span").find("span").text.strip().replace(" ", ""))
             except:
                 book_new_price = "No new book price"
 
@@ -99,31 +80,63 @@ def get_data():
                     "book_status": book_status
                 }
             )
+        print(f"[INFO] Page {page} finished!")
 
-            with open(f"labirint_{cur_time}.csv", "a", encoding="utf-8") as file:
-                writer = csv.writer(file)
 
-                writer.writerow(
-                    (
-                        book_title,
-                        book_author,
-                        book_publishing,
-                        book_new_price,
-                        book_old_price,
-                        book_sale,
-                        book_status
-                    )
-                )
+async def gather_data():
+    # create connection
+    async with aiohttp.ClientSession() as session:
+        response = await session.get(url=url, headers=headers)
+        soup = BeautifulSoup(await response.text(), 'lxml')
+        pages_count = int(soup.find("div", class_="pagination_numbers").find_all("a")[-1].text)
 
-        print(f"Page {page}/{pages_count} finished!")
-        time.sleep(1)
+        tasks = []
 
-    with open(f"labirint_{cur_time}.json", "w", encoding="utf-8") as file:
-        json.dump(books_data, file, indent=4, ensure_ascii=False)
+        for page in range(1, pages_count + 1):
+            task = asyncio.create_task(get_page_data(session, page))
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
 
 
 def main():
-    get_data()
+    asyncio.run(gather_data())
+    cur_time = datetime.now().strftime("%d_%m_%Y_%H_%M")
+
+    with open(f"labirint_{cur_time}_async.json", "w", encoding="utf-8") as file:
+        json.dump(books_data, file, indent=4, ensure_ascii=False)
+
+    with open(f"labirint_{cur_time}_async.csv", "w", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        writer.writerow(
+            (
+                "Book name",
+                "Author",
+                "Publishing",
+                "Sale price",
+                "Price",
+                "Sale amount",
+                "Status"
+            )
+        )
+
+    for book in books_data:
+        with open(f"labirint_{cur_time}_async.csv", "a", encoding="utf-8") as file:
+            writer = csv.writer(file)
+
+            writer.writerow(
+                (
+                    book["book_title"],
+                    book["book_author"],
+                    book["book_publishing"],
+                    book["book_new_price"],
+                    book["book_old_price"],
+                    book["book_sale"],
+                    book["book_status"]
+                )
+            )
+
     finish_time = time.time() - start_time
     print(f"Time spent - {finish_time}")
 
